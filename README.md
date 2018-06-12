@@ -1,33 +1,36 @@
-
 # react-native-add-calendar-event
 
-This package alows you to start an activity (Android) or show a modal window (iOS) for adding events to calendar. Through a promise, you can find out if a new event was added and get its id. See the usage section for more information.
+This package alows you to start an activity (Android) or show a modal window (iOS) for adding, viewing or editing events in device's calendar. Through a promise, you can find out if a new event was added and get its id, or if it was removed. The functionality is provided through native modules and won't therefore work with Expo.
 
+For managing calendar events without the UI for user to interact with, see [react-native-calendar-events](https://github.com/wmcmahan/react-native-calendar-events).
 
 <img src="https://raw.githubusercontent.com/vonovak/react-native-add-calendar-event/master/example/ios.gif" width="300" hspace="60" /> <img src="https://raw.githubusercontent.com/vonovak/react-native-add-calendar-event/master/example/android.gif" width="300" />
 
-
 ## Getting started
 
+> Note: this readme currently covers the v2 RC that you can get by `yarn add react-native-add-calendar-event@next`. See [this](https://github.com/vonovak/react-native-add-calendar-event/tree/1.x) for the v1 docs.
+
 `npm install react-native-add-calendar-event --save`
+
+or
 
 `yarn add react-native-add-calendar-event`
 
 ### Mostly automatic installation
 
-1. `react-native link react-native-add-calendar-event`
+1.  `react-native link react-native-add-calendar-event`
 
-2. add `NSCalendarsUsageDescription` key to your `Info.plist` file. The string value associated with the key will be used when asking user for calendar permission.
+2.  add `NSCalendarsUsageDescription` and `NSContactsUsageDescription` keys to your `Info.plist` file. The string value associated with the key will be used when asking user for calendar permission.
 
-3. rebuild your project
+3.  rebuild your project
 
+iOS note: If you use pods, `react-native link` will probably add the podspec to your podfile, in which case you need to run `pod install`. If not, please verify that the library is under `link binary with libraries` in the build settings in Xcode (see manual installation notes).
 
+## Quick example
 
-## Usage
+See the example folder for a demo app.
 
-see the example for a demo app
-
-```javascript
+```js
 import * as AddCalendarEvent from 'react-native-add-calendar-event';
 
 const eventConfig = {
@@ -35,68 +38,147 @@ const eventConfig = {
   // and other options
 };
 
-AddCalendarEvent.presentNewCalendarEventDialog(eventConfig)
-  .then(eventId => {
-    //handle success (receives event id) or dismissing the modal (receives false)
-    if (eventId) {
-      console.warn(eventId);
+AddCalendarEvent.presentEventCreatingDialog(eventConfig)
+  .then((eventInfo: { calendarItemIdentifier: string, eventIdentifier: string }) => {
+    // handle success - receives an object with `calendarItemIdentifier` and `eventIdentifier` keys, both of type string.
+    // These are two different identifiers on iOS.
+    // On Android, where they are both equal and represent the event id, also strings.
+    // when false is returned, the dialog was dismissed
+    if (eventInfo) {
+      console.warn(JSON.stringify(eventInfo));
     } else {
-      console.warn('dismissed');
+      console.warn(eventInfo);
     }
   })
   .catch((error: string) => {
     // handle error such as when user rejected permissions
     console.warn(error);
   });
-};
 ```
 
-### supported options:
+### Creating an event
 
+call `presentEventCreatingDialog(eventConfig)`
 
-| Property        | Value            | Note |
-| :--------------- | :---------------- | :----------- |
-| title           | String             |  |
-| startDate       | String             | format: 'YYYY-MM-DDTHH:mm:ss.SSSZZ'  |
-| endDate         | String             | format: 'YYYY-MM-DDTHH:mm:ss.SSSZZ'  |
-| location        | String           |   |
-| url             | String           | iOS only  |
-| notes           | String           | The notes (iOS) or description (Android) associated with the event. |
+eventConfig object:
 
+| Property  | Value   | Note                                                                |
+| :-------- | :------ | :------------------------------------------------------------------ |
+| title     | String  |                                                                     |
+| startDate | String  | format: 'YYYY-MM-DDTHH:mm:ss.SSSZ'                                  |
+| endDate   | String  | format: 'YYYY-MM-DDTHH:mm:ss.SSSZ'                                  |
+| location  | String  |                                                                     |
+| allDay    | boolean |                                                                     |
+| url       | String  | iOS only                                                            |
+| notes     | String  | The notes (iOS) or description (Android) associated with the event. |
 
-The dates passed to this module are strings. If you use moment, you may get the right format via `moment(momentInUTC).local().format('YYYY-MM-DDTHH:mm:ss.SSSZZ')` the string may look eg. like this: `'2017-09-25T08:00:00.000+0200'`.
+The dates passed to this module are strings. If you use moment, you may get the right format via `momentInUTC.format('YYYY-MM-DDTHH:mm:ss.SSS[Z]')` the string may look eg. like this: `'2017-09-25T08:00:00.000Z'`.
 
 More options can be easily added, PRs are welcome!
 
+### Editing an event
+
+call `presentEventEditingDialog(eventConfig)`
+
+eventConfig object:
+
+| Property      | Value   | Note                                 |
+| :------------ | :------ | :----------------------------------- |
+| eventId       | String  | Id of edited event.                  |
+| useEditIntent | boolean | Android only, see description below. |
+
+useEditIntent: `ACTION_EDIT` should work for editing events, according to [android docs](https://developer.android.com/guide/topics/providers/calendar-provider.html#intent-edit) but this doesn't always seem to be the case as reported in the [bug tracker](https://issuetracker.google.com/u/1/issues/36957942?pli=1). This option leaves the choice up to you. By default, the module will use `ACTION_VIEW` which will only show the event, but from there it is easy for the user to tap the edit button and make changes.
+
+### Viewing an event
+
+call `presentEventViewingDialog(eventConfig)`
+
+eventConfig object:
+
+| Property | Value  | Note                |
+| :------- | :----- | :------------------ |
+| eventId  | String | Id of edited event. |
+
+### Interpreting the results
+
+The aforementioned functions all return promises that resolve with information about what happened or reject with and error.
+
+Due to the differences in the underlying native apis, it is not trivial to come up with a unified interface that could be exposed to JS and the module therefore returns slightly different results on each platform. The rules are:
+
+- presentEventCreatingDialog
+
+| situation                   | result on both platforms                                                       |
+| :-------------------------- | :----------------------------------------------------------------------------- |
+| event is created            | `{ action: 'SAVED', eventIdentifier: string, calendarItemIdentifier: string }` |
+| event creation is cancelled | `{ action: 'CANCELED' }`                                                       |
+
+- presentEventEditingDialog
+
+| situation                  | result on iOS                                                                  | result on Android        |
+| :------------------------- | :----------------------------------------------------------------------------- | ------------------------ |
+| event is edited            | `{ action: 'SAVED', eventIdentifier: string, calendarItemIdentifier: string }` | `{ action: 'CANCELED' }` |
+| event editing is cancelled | `{ action: 'CANCELED' }`                                                       | `{ action: 'CANCELED' }` |
+| event is deleted           | `{ action: 'DELETED' }`                                                        | `{ action: 'DELETED' }`  |
+
+- presentEventViewingDialog
+
+On Android, this will lead to same situation as calling `presentEventEditingDialog`; the following table describes iOS only:
+
+| situation                                              | result on iOS             |
+| :----------------------------------------------------- | :------------------------ |
+| event modal is dismissed                               | `{ action: 'DONE' }`      |
+| user responded to and saved a pending event invitation | `{ action: 'RESPONDED' }` |
+| event is deleted                                       | `{ action: 'DELETED' }`   |
+
+### Configuring the navigation bar (iOS only)
+
+The navigation bar appearance for all calls can be customized by providing a `navigationBarIOS` object in the config. The object has the following shape:
+
+```
+navigationBarIOS: {
+  tintColor: string,
+  barTintColor: string,
+  backgroundColor: string,
+  translucent: boolean,
+}
+```
+
+Please see the docs on [tintColor](https://developer.apple.com/documentation/uikit/uinavigationbar/1624937-tintcolor?language=objc), [barTintColor](https://developer.apple.com/documentation/uikit/uinavigationbar/1624931-bartintcolor?language=objc), [backgroundColor](https://developer.apple.com/documentation/uikit/uiview/1622591-backgroundcolor?language=objc), [translucent](https://developer.apple.com/documentation/uikit/uinavigationbar/1624928-translucent?language=objc)
+
+### Exported constants
+
+Please note that `SAVED`, `CANCELED`, `DELETED`, `DONE` and `RESPONDED` constants are exported from the module. The constants are borrowed from iOS and are covered in [EKEventViewAction docs](https://developer.apple.com/documentation/eventkitui/ekeventviewaction?language=objc) and [EKEventEditViewAction docs](https://developer.apple.com/documentation/eventkitui/ekeventeditviewaction?language=objc).
+
+#### Note on the `Date` JS Object
+
 It is recommended to not rely on the standard `Date` object and instead use some third party library for dealing with dates, such as moment.js because JavaScriptCore (which is used to run react-native on devices) handles dates differently from V8 (which is used when debugging, when the code runs on your computer).
 
-#### Changing language of the dialog
+#### Changing the language of the iOS dialog
 
 see [StackOverflow answer](https://stackoverflow.com/questions/18425945/xcode-5-and-localization-of-xib-files)
 
 ### Manual installation
 
-
 #### iOS
 
-1. In XCode, in the project navigator, right click `Libraries` ➜ `Add Files to [your project's name]`
-2. Go to `node_modules` ➜ `react-native-add-calendar-event` and add `AddCalendarEvent.xcodeproj`
-3. In XCode, in the project navigator, select your project. Add `libAddCalendarEvent.a` to your project's `Build Phases` ➜ `Link Binary With Libraries`
-4. Run your project (`Cmd+R`)<
+1.  In XCode, in the project navigator, right click `Libraries` ➜ `Add Files to [your project's name]`
+2.  Go to `node_modules` ➜ `react-native-add-calendar-event` and add `RNAddCalendarEvent.xcodeproj`
+3.  In XCode, in the project navigator, select your project. Add `libRNAddCalendarEvent.a` to your project's `Build Phases` ➜ `Link Binary With Libraries`
+4.  Run your project (`Cmd+R`)<
 
 #### Android
 
-1. Open up `android/app/src/main/java/[...]/MainActivity.java`
-  - Add `import com.vonovak.AddCalendarEventPackage;` to the imports at the top of the file
-  - Add `new AddCalendarEventPackage()` to the list returned by the `getPackages()` method
-2. Append the following lines to `android/settings.gradle`:
+1.  Open up `android/app/src/main/java/[...]/MainActivity.java`
+
+- Add `import com.vonovak.AddCalendarEventPackage;` to the imports at the top of the file
+- Add `new AddCalendarEventPackage()` to the list returned by the `getPackages()` method
+
+2.  Append the following lines to `android/settings.gradle`:
     ```
     include ':react-native-add-calendar-event'
     project(':react-native-add-calendar-event').projectDir = new File(rootProject.projectDir,   '../node_modules/react-native-add-calendar-event/android')
     ```
-3. Insert the following lines inside the dependencies block in `android/app/build.gradle`:
+3.  Insert the following lines inside the dependencies block in `android/app/build.gradle`:
     ```
       compile project(':react-native-add-calendar-event')
     ```
-
-  
