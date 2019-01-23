@@ -131,14 +131,19 @@ RCT_EXPORT_METHOD(presentEventCreatingDialog:(NSDictionary *)options resolver:(R
     self.eventOptions = options;
     self.resolver = resolve;
     self.rejecter = reject;
-
+    
+    
     AddCalendarEvent * __weak weakSelf = self;
     
     void (^showEventCreatingController)(EKEvent *) = ^(EKEvent * event){
+        
+        //event.startDate = [RCTConvert NSDate:options[_startDate]];
+        
         EKEventEditViewController *controller = [[EKEventEditViewController alloc] init];
-    
+        controller.event = event;
         controller.eventStore = [weakSelf getEventStoreInstance];
         controller.editViewDelegate = weakSelf;
+        
         [weakSelf assignNavbarColorsTo:controller.navigationBar];
         [weakSelf presentViewController:controller];
     };
@@ -251,12 +256,8 @@ RCT_EXPORT_METHOD(presentEventEditingDialog:(NSDictionary *)options resolver:(RC
     
     NSDate *FStartDate = [RCTConvert NSDate:_eventOptions[_startDate]];
     NSDate *FEndDate = [RCTConvert NSDate:_eventOptions[_endDate]];
-    NSLog(@"hey hey");
-//    NSLog(@"%@", FStartDate);
-//    NSLog(@"%@", _eventOptions[_endDate]);
+
     
-    
-    //[dateFormat dateFromString:_eventOptions[_endDate]]
     
     NSPredicate *predicate = [[self getEventStoreInstance] predicateForEventsWithStartDate:FStartDate
                                              endDate:FEndDate
@@ -267,8 +268,7 @@ RCT_EXPORT_METHOD(presentEventEditingDialog:(NSDictionary *)options resolver:(RC
     EKEvent *Fevent = [[self getEventStoreInstance] calendarItemWithIdentifier: _eventOptions[_eventId]];
     
     for (EKEvent *event in calendarEvents) {
-//        NSLog(@"%@", event);
-//        NSLog(@"%@", Fevent);
+
         if(Fevent.calendarItemExternalIdentifier == event.calendarItemExternalIdentifier) {
             return  event;
         }
@@ -301,6 +301,8 @@ RCT_EXPORT_METHOD(presentEventEditingDialog:(NSDictionary *)options resolver:(RC
     event.title = [RCTConvert NSString:options[_title]];
     event.location = options[_location] ? [RCTConvert NSString:options[_location]] : nil;
     
+    
+    
     if (options[_startDate]) {
         event.startDate = [RCTConvert NSDate:options[_startDate]];
     }
@@ -316,6 +318,9 @@ RCT_EXPORT_METHOD(presentEventEditingDialog:(NSDictionary *)options resolver:(RC
     if (options[_allDay]) {
         event.allDay = [RCTConvert BOOL:options[_allDay]];
     }
+    
+    
+    
     return event;
 }
 
